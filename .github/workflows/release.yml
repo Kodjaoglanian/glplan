@@ -215,11 +215,15 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
-          PREV="$(git tag --sort=-version:refname | grep -Fx "$VERSION" | head -n 1 || true)"
+          PREV="$(git tag --sort=-version:refname | grep -vFx "$VERSION" | head -n 1 || true)"
           if [ -n "$PREV" ]; then
             LOG="$(git log --pretty=format:'- %s (%h)' "${PREV}..HEAD")"
           else
             LOG="$(git log --pretty=format:'- %s (%h)' -30)"
+          fi
+          if [ -z "$LOG" ]; then
+            echo "::error::release notes would be empty; check tag history and checkout fetch-depth"
+            exit 1
           fi
           {
             echo "## Glplan $VERSION"
