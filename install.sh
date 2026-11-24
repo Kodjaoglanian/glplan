@@ -145,8 +145,8 @@ main() {
     if "$INSTALL_DIR/$binary" --version >/dev/null 2>&1; then
         ok "Glplan $version instalado com sucesso"
         echo ""
-        echo -e "  ${CYAN}glplan serve${NC}   inicia a API (um terminal)"
-        echo -e "  ${CYAN}glplan tui${NC}     abre o board (outro terminal)"
+        echo -e "  ${CYAN}glplan${NC}         abre o board direto"
+        echo -e "  ${CYAN}glplan serve${NC}   compartilha a API entre máquinas/agentes"
         echo -e "  ${CYAN}glplan mcp${NC}     servidor MCP para agentes"
         echo ""
         warn "reinicie o terminal ou rode: source $rc"

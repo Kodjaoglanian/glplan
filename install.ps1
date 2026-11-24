@@ -94,8 +94,8 @@ try {
     $installedVersion = & $binaryPath --version
     Write-Ok "Glplan $installedVersion instalado com sucesso"
     Write-Host ""
-    Write-Host "  glplan serve   inicia a API (um terminal)" -ForegroundColor Cyan
-    Write-Host "  glplan tui     abre o board (outro terminal)" -ForegroundColor Cyan
+    Write-Host "  glplan         abre o board direto" -ForegroundColor Cyan
+    Write-Host "  glplan serve   compartilha a API entre máquinas/agentes" -ForegroundColor Cyan
     Write-Host "  glplan mcp     servidor MCP para agentes" -ForegroundColor Cyan
     Write-Host ""
     Write-Warn "reinicie o terminal para o PATH fazer efeito"

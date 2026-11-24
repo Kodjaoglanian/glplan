@@ -113,9 +113,9 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o glplan.exe ./cmd/glplan
 Push de uma tag `v*`:
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+git tag vX.Y.Z && git push origin vX.Y.Z
 ```
 
-O `.github/workflows/release.yml` cria a release, compila linux/amd64, linux/arm64, windows/amd64 e windows/arm64 com `CGO_ENABLED=0`, publica binários + `.sha256` e os instaladores. Também dá para disparar manualmente via `workflow_dispatch` informando a versão.
+O `.github/workflows/release.yml` valida a versão, roda formatação/vet/testes, compila linux/amd64, linux/arm64, windows/amd64 e windows/arm64 em paralelo, verifica arquivos e checksums, e só então publica a release completa com binários + `.sha256` e instaladores. Também dá para disparar manualmente via `workflow_dispatch` informando a versão.
 
 Licença: MIT.
