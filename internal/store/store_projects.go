@@ -15,13 +15,14 @@ var ErrNotFound = errors.New("not found")
 var defaultColumns = []struct {
 	name   string
 	color  string
+	wip    int
 	isDone bool
 }{
-	{"Backlog", "#64748b", false},
-	{"Todo", "#3b82f6", false},
-	{"In Progress", "#f59e0b", false},
-	{"Review", "#a855f7", false},
-	{"Done", "#22c55e", true},
+	{"Backlog", "#64748b", 0, false},
+	{"Todo", "#3b82f6", 0, false},
+	{"In Progress", "#f59e0b", 3, false},
+	{"Review", "#a855f7", 2, false},
+	{"Done", "#22c55e", 0, true},
 }
 
 // CreateProject inserts a project, its numbering sequence and a default board.
@@ -51,8 +52,8 @@ func (s *Store) CreateProject(p *model.Project) error {
 		return err
 	}
 	for i, c := range defaultColumns {
-		if _, err := tx.Exec(`INSERT INTO columns(id,project_id,name,color,position,wip_limit,is_done) VALUES(?,?,?,?,?,0,?)`,
-			model.NewID("col"), p.ID, c.name, c.color, i, boolInt(c.isDone)); err != nil {
+		if _, err := tx.Exec(`INSERT INTO columns(id,project_id,name,color,position,wip_limit,is_done) VALUES(?,?,?,?,?,?,?)`,
+			model.NewID("col"), p.ID, c.name, c.color, i, c.wip, boolInt(c.isDone)); err != nil {
 			return err
 		}
 	}

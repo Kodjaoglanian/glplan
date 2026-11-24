@@ -1,12 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"glplan/internal/api"
 	"glplan/internal/mcp"
@@ -92,16 +98,26 @@ func main() {
 
 	switch cmd {
 	case "tui", "board", "":
-		runTUI(*server, *token)
+		runTUI(*server, *token, *data, *noSeed)
 	case "serve", "server":
 		runServe(*data, *addr, *token, *noSeed)
 	case "mcp", "mcp-server":
-		if err := mcp.Run(*server, *token, version); err != nil {
+		client, embedded, err := clientWithEmbedded(*server, *token, *data, !*noSeed)
+		if embedded != nil {
+			defer embedded.Close()
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "aviso:", err)
+		}
+		endpoint := client.BaseURL
+		if err := mcp.Run(endpoint, *token, version); err != nil {
 			fmt.Fprintln(os.Stderr, "mcp:", err)
 			os.Exit(1)
 		}
 	case "init":
 		runInit(*data, *noSeed)
+	case "version":
+		fmt.Println(version)
 	case "config":
 		runConfig(*server, *token, *data, *addr)
 	case "help", "-h", "--help":
@@ -149,13 +165,100 @@ func openStore(path string, seed bool) (*store.Store, error) {
 	return s, nil
 }
 
-func runTUI(server, token string) {
-	client := api.NewClient(server, token)
-	if err := client.Health(); err != nil {
-		fmt.Fprintln(os.Stderr, "aviso:", err)
-		fmt.Fprintln(os.Stderr, "iniciando 'glplan serve' em outro terminal para usar a interface.")
+type embeddedAPI struct {
+	url    string
+	server *http.Server
+	store  *store.Store
+}
+
+func startEmbeddedAPI(data, token string, seed bool) (*embeddedAPI, error) {
+	s, err := openStore(data, seed)
+	if err != nil {
+		return nil, err
 	}
-	p := tea.NewProgram(tui.New(client), tea.WithAltScreen())
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		s.Close()
+		return nil, err
+	}
+	api.SetVersion(version)
+	httpServer := &http.Server{Handler: api.New(s, token).Handler()}
+	go func() {
+		if err := httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			fmt.Fprintln(os.Stderr, "api embutida:", err)
+		}
+	}()
+	return &embeddedAPI{url: "http://" + listener.Addr().String(), server: httpServer, store: s}, nil
+}
+
+func (e *embeddedAPI) Close() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = e.server.Shutdown(ctx)
+	_ = e.store.Close()
+}
+
+func isLocalAPI(server string) bool {
+	if strings.TrimSpace(server) == "" {
+		return true
+	}
+	u, err := url.Parse(server)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "" || host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
+func shouldStartEmbedded(server string, healthErr error) bool {
+	if healthErr == nil || !isLocalAPI(server) {
+		return false
+	}
+	var apiErr *api.APIError
+	return !errors.As(healthErr, &apiErr)
+}
+
+func clientWithEmbedded(server, token, data string, seed bool) (*api.Client, *embeddedAPI, error) {
+	client := api.NewClient(server, token)
+	healthErr := client.Health()
+	if healthErr == nil {
+		return client, nil, nil
+	}
+	if !shouldStartEmbedded(server, healthErr) {
+		return client, nil, healthErr
+	}
+	embedded, err := startEmbeddedAPI(data, token, seed)
+	if err != nil {
+		return client, nil, err
+	}
+	embeddedClient := api.NewClient(embedded.url, token)
+	if err := embeddedClient.Health(); err != nil {
+		embedded.Close()
+		return client, nil, err
+	}
+	return embeddedClient, embedded, nil
+}
+
+func runTUI(server, token, data string, noSeed bool) {
+	client, embedded, err := clientWithEmbedded(server, token, data, !noSeed)
+	if embedded != nil {
+		defer embedded.Close()
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "aviso:", err)
+		fmt.Fprintln(os.Stderr, "para compartilhar o board, rode 'glplan serve' em outro terminal.")
+	}
+	backend := "api local"
+	if embedded != nil {
+		backend = "local embutido"
+	} else if server != "" && !isLocalAPI(server) {
+		if u, err := url.Parse(server); err == nil && u.Hostname() != "" {
+			backend = u.Hostname()
+		} else {
+			backend = "api remota"
+		}
+	}
+	p := tea.NewProgram(tui.NewWithBackend(client, backend), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "tui:", err)
 		os.Exit(1)

@@ -1,6 +1,6 @@
 # glplan
 
-Board kanban **AI-first** no terminal. Um binário Go, API HTTP para equipe, TUI no estilo Vercel e servidor MCP para agentes.
+Board kanban **AI-first** no terminal. Um binário Go com TUI operacional de alta densidade, SQLite local, API HTTP para equipe e servidor MCP para agentes.
 
 ```
 ┌ Backlog ─────────┐ ┌ Todo ────────────┐ ┌ In Progress ─────┐ ┌ Done ────────────┐
@@ -29,19 +29,18 @@ Sobrescreva com `GLPLAN_INSTALL_DIR` / `GLPLAN_VERSION` se precisar.
 
 ## Começando
 
-Em um terminal:
+```bash
+glplan
+```
+
+Esse é o caminho plug-and-play: se nenhuma API local estiver disponível, o próprio processo da TUI sobe um backend embutido, cria `~/.local/share/glplan/glplan.db` e semeia um board de exemplo na primeira execução (`--no-seed` desliga). Não é preciso entender a arquitetura antes de usar.
+
+Para compartilhar o mesmo board entre pessoas, agentes e várias janelas, rode um servidor explícito:
 
 ```bash
 glplan serve          # API em http://127.0.0.1:9876
+glplan tui            # em outro terminal; conecta na API local
 ```
-
-Em outro:
-
-```bash
-glplan tui            # board interativo
-```
-
-O `serve` cria o SQLite em `~/.local/share/glplan/glplan.db` e semeia um board de exemplo na primeira execução (`--no-seed` desliga).
 
 ## TUI
 
@@ -50,21 +49,22 @@ O `serve` cria o SQLite em `~/.local/share/glplan/glplan.db` e semeia um board d
 | `j/k`, `↑/↓` | navegar tasks |
 | `h/l`, `←/→` | mudar de coluna |
 | `enter` | abrir detalhes |
-| `n` | nova task |
+| `n` / `e` | nova task / editar task |
+| `J / K` | reordenar dentro da coluna |
 | `> / <` | mover task entre colunas |
 | `/` | buscar |
-| `p` | trocar projeto |
+| `p` / `N` | trocar projeto / novo projeto |
 | `1 2 3` | board / lista / atividade |
 | `r` | atualizar da API |
 | `?` | ajuda · `q` sair |
 
-Dentro do detalhe: `x` concluir subtask, `t` novo subtask, `c` comentar, `p` ciclar prioridade, `a` ciclar responsável, `del` excluir.
+Dentro do detalhe: `x` concluir subtask, `t` novo subtask, `c` comentar, `L` editar labels, `d` ciclar prazo, `p` ciclar prioridade, `a` ciclar responsável, `del` excluir.
 
 A interface atualiza sozinha a cada 4 segundos, então várias pessoas podem ver o mesmo board.
 
 ## MCP
 
-O servidor MCP fala stdio e usa a mesma API do TUI:
+O servidor MCP fala stdio e usa a mesma API do TUI. Se nenhuma API local estiver disponível, ele também pode subir o backend embutido usando o mesmo SQLite:
 
 ```json
 {
@@ -88,7 +88,7 @@ Prompts: `plan_sprint`, `triage`.
 
 ## API
 
-`GET /api/health`, `/api/projects`, `/api/projects/{id}/board`, `/api/tasks`, `/api/tasks/{id}`, `/api/search`, `/api/projects/{id}/activity`, além de rotas para colunas, labels, membros, comentários e subtasks. Autenticação bearer opcional via `GLPLAN_TOKEN`.
+`GET /api/health`, `/api/projects`, `/api/projects/{id}/board`, `/api/tasks`, `/api/tasks/{id}`, `/api/search`, `/api/projects/{id}/activity`, além de rotas para colunas, labels, membros, comentários e subtasks. Rotas de projeto aceitam ID ou key (por exemplo `GL`). Autenticação bearer opcional via `GLPLAN_TOKEN`.
 
 ## Configuração
 
@@ -102,6 +102,8 @@ Precedência: flags > variáveis de ambiente > `~/.config/glplan/config.json`.
 ## Build local
 
 ```bash
+go test ./...
+go vet ./...
 go build -o glplan ./cmd/glplan
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o glplan.exe ./cmd/glplan
 ```

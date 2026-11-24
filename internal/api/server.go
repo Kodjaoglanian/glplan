@@ -244,6 +244,9 @@ func parseDate(raw map[string]json.RawMessage, key string) (*time.Time, error) {
 	if s == nil {
 		return nil, bad("invalid %s", key)
 	}
+	if strings.TrimSpace(*s) == "" {
+		return nil, nil
+	}
 	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02"} {
 		if t, err := time.Parse(layout, *s); err == nil {
 			utc := t.UTC()
@@ -262,6 +265,24 @@ func require(raw map[string]json.RawMessage, key string) (string, error) {
 }
 
 func projectID(r *http.Request) string { return r.PathValue("id") }
+
+func (s *Server) resolveProjectID(idOrKey string) (string, error) {
+	p, err := s.store.GetProject(idOrKey)
+	if err != nil {
+		return "", err
+	}
+	return p.ID, nil
+}
+
+func (s *Server) resolveProjectFilter(idOrKey string) string {
+	if idOrKey == "" {
+		return ""
+	}
+	if p, err := s.store.GetProject(idOrKey); err == nil {
+		return p.ID
+	}
+	return idOrKey
+}
 
 func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 	out, err := s.store.ListProjects()
@@ -363,7 +384,12 @@ func (s *Server) getBoard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listColumns(w http.ResponseWriter, r *http.Request) {
-	cols, err := s.store.ListColumns(projectID(r))
+	project, err := s.resolveProjectID(projectID(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	cols, err := s.store.ListColumns(project)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -382,7 +408,12 @@ func (s *Server) createColumn(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	c, err := s.store.CreateColumn(projectID(r), name, valueOr(str(raw, "color"), ""), intOr(intVal(raw, "wip_limit"), 0))
+	project, err := s.resolveProjectID(projectID(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	c, err := s.store.CreateColumn(project, name, valueOr(str(raw, "color"), ""), intOr(intVal(raw, "wip_limit"), 0))
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -416,11 +447,16 @@ func (s *Server) reorderColumns(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, bad("ids is required"))
 		return
 	}
-	if err := s.store.ReorderColumns(projectID(r), *ids); err != nil {
+	project, err := s.resolveProjectID(projectID(r))
+	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	cols, _ := s.store.ListColumns(projectID(r))
+	if err := s.store.ReorderColumns(project, *ids); err != nil {
+		writeErr(w, err)
+		return
+	}
+	cols, _ := s.store.ListColumns(project)
 	writeJSON(w, 200, cols)
 }
 
@@ -447,7 +483,12 @@ func (s *Server) deleteColumn(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listLabels(w http.ResponseWriter, r *http.Request) {
-	out, err := s.store.ListLabels(projectID(r))
+	project, err := s.resolveProjectID(projectID(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	out, err := s.store.ListLabels(project)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -466,7 +507,12 @@ func (s *Server) createLabel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	l, err := s.store.CreateLabel(projectID(r), name, valueOr(str(raw, "color"), ""))
+	project, err := s.resolveProjectID(projectID(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	l, err := s.store.CreateLabel(project, name, valueOr(str(raw, "color"), ""))
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -549,7 +595,7 @@ func (s *Server) deleteMember(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	f := model.TaskFilter{
-		ProjectID:   q.Get("project"),
+		ProjectID:   s.resolveProjectFilter(q.Get("project")),
 		ColumnID:    q.Get("column"),
 		AssigneeID:  q.Get("assignee"),
 		LabelID:     q.Get("label"),
@@ -765,7 +811,12 @@ func (s *Server) deleteSubtask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listActivity(w http.ResponseWriter, r *http.Request) {
-	out, err := s.store.ListActivity(projectID(r), queryInt(r.URL.Query(), "limit", 30))
+	project, err := s.resolveProjectID(projectID(r))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	out, err := s.store.ListActivity(project, queryInt(r.URL.Query(), "limit", 30))
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -775,7 +826,7 @@ func (s *Server) listActivity(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	tasks, err := s.store.ListTasks(model.TaskFilter{
-		ProjectID:   r.URL.Query().Get("project"),
+		ProjectID:   s.resolveProjectFilter(r.URL.Query().Get("project")),
 		Search:      r.URL.Query().Get("q"),
 		IncludeDone: true,
 		Limit:       100,

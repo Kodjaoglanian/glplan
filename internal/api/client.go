@@ -38,7 +38,16 @@ type APIError struct {
 	Body   string
 }
 
-func (e *APIError) Error() string { return fmt.Sprintf("API %d: %s", e.Status, strings.TrimSpace(e.Body)) }
+func (e *APIError) Error() string {
+	body := strings.TrimSpace(e.Body)
+	var parsed struct {
+		Error string `json:"error"`
+	}
+	if json.Unmarshal([]byte(body), &parsed) == nil && parsed.Error != "" {
+		body = parsed.Error
+	}
+	return fmt.Sprintf("API %d: %s", e.Status, body)
+}
 
 func (c *Client) do(method, path string, body any, out any) error {
 	var reader io.Reader
@@ -194,11 +203,23 @@ func (c *Client) GetTask(id string) (*model.Task, error) {
 	return out, err
 }
 
+// CreateTaskInput describes a new task.
+type CreateTaskInput struct {
+	ProjectID   string
+	ColumnID    string
+	Title       string
+	Description string
+	Priority    model.Priority
+	Estimate    int
+	LabelIDs    []string
+}
+
 // CreateTask adds a task to a board.
-func (c *Client) CreateTask(projectID, columnID, title, description string, priority model.Priority, labelIDs []string) (*model.Task, error) {
+func (c *Client) CreateTask(in CreateTaskInput) (*model.Task, error) {
 	payload := map[string]any{
-		"project_id": projectID, "column_id": columnID, "title": title,
-		"description": description, "priority": string(priority), "label_ids": labelIDs,
+		"project_id": in.ProjectID, "column_id": in.ColumnID, "title": in.Title,
+		"description": in.Description, "priority": string(in.Priority), "estimate": in.Estimate,
+		"label_ids": in.LabelIDs,
 	}
 	out := &model.Task{}
 	err := c.do("POST", "/api/tasks", payload, out)
@@ -227,8 +248,8 @@ func (c *Client) MoveTask(id, columnID, beforeID string, position *float64) (*mo
 }
 
 // AddComment leaves a note on a task.
-func (c *Client) AddComment(taskID, body string) error {
-	return c.do("POST", "/api/tasks/"+url.PathEscape(taskID)+"/comments", map[string]any{"body": body}, nil)
+func (c *Client) AddComment(taskID, author, body string) error {
+	return c.do("POST", "/api/tasks/"+url.PathEscape(taskID)+"/comments", map[string]any{"author": author, "body": body}, nil)
 }
 
 // ListComments returns a task's notes.

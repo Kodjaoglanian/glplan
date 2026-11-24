@@ -208,8 +208,15 @@ func registerTools(s *server.MCPServer, c *api.Client) {
 			return fail(err)
 		}
 		priority := req.GetString("priority", "none")
-		t, err := c.CreateTask(project, req.GetString("column_id", ""), title,
-			req.GetString("description", ""), model.Priority(priority), req.GetStringSlice("labels", nil))
+		t, err := c.CreateTask(api.CreateTaskInput{
+			ProjectID:   project,
+			ColumnID:    req.GetString("column_id", ""),
+			Title:       title,
+			Description: req.GetString("description", ""),
+			Priority:    model.Priority(priority),
+			Estimate:    req.GetInt("estimate", 0),
+			LabelIDs:    req.GetStringSlice("labels", nil),
+		})
 		if err != nil {
 			return fail(err)
 		}
@@ -428,7 +435,7 @@ func registerTools(s *server.MCPServer, c *api.Client) {
 		if err != nil {
 			return fail(err)
 		}
-		if err := c.AddComment(id, body); err != nil {
+		if err := c.AddComment(id, req.GetString("author", ""), body); err != nil {
 			return fail(err)
 		}
 		return mcp.NewToolResultText("comment added"), nil

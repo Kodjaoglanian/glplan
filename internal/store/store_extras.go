@@ -65,7 +65,7 @@ func (s *Store) AddComment(taskID, author, body string) (*model.Comment, error) 
 		c.ID, c.TaskID, c.Author, c.Body, fmtTime(c.CreatedAt)); err != nil {
 		return nil, err
 	}
-	if err := s.LogActivity(t.ProjectID, &t.ID, author, "comment.added", ""); err != nil {
+	if err := s.LogActivity(t.ProjectID, &t.ID, author, "comment.added", t.Ref+" · comentário"); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -109,35 +109,93 @@ func (s *Store) Seed() error {
 	for _, c := range cols {
 		byName[c.Name] = c.ID
 	}
-	for _, m := range []string{"Ana", "Bruno", "Carla"} {
-		if _, err := s.CreateMember(m, "", "#7c3aed"); err != nil {
-			return err
-		}
-	}
-	for _, l := range []struct{ name, color string }{
-		{"bug", "#ef4444"}, {"feature", "#3b82f6"}, {"design", "#a855f7"}, {"infra", "#64748b"},
+
+	members := map[string]string{}
+	for _, m := range []struct{ name, color string }{
+		{"Ana Lima", "#3BE4D8"}, {"Bruno Reis", "#63A9FF"}, {"Carla Nunes", "#A98BFF"},
 	} {
-		if _, err := s.CreateLabel(p.ID, l.name, l.color); err != nil {
-			return err
-		}
-	}
-	samples := []struct {
-		title, desc, column string
-		priority            model.Priority
-	}{
-		{"Desenhar fluxo de onboarding", "Mapear os primeiros 5 minutos do usuário no TUI.", "Todo", model.PriorityHigh},
-		{"Implementar sincronização via API", "Cliente HTTP com retry e cache local.", "In Progress", model.PriorityUrgent},
-		{"Criar installer one-line", "curl | bash e irm | iex publicados no release.", "In Progress", model.PriorityHigh},
-		{"Revisar atalhos de teclado", "Padronizar navegação hjkl e setas.", "Review", model.PriorityMedium},
-		{"Estruturar schema do SQLite", "Tabelas de projects, tasks, labels e activity.", "Done", model.PriorityNone},
-	}
-	for _, sample := range samples {
-		t, err := s.CreateTask(p.ID, byName[sample.column], sample.title, sample.desc, sample.priority, 0)
+		member, err := s.CreateMember(m.name, "", m.color)
 		if err != nil {
 			return err
 		}
-		if sample.title == "Criar installer one-line" {
-			_ = t
+		members[m.name] = member.ID
+	}
+
+	labels := map[string]string{}
+	for _, l := range []struct{ name, color string }{
+		{"bug", "#FF5263"}, {"feature", "#63A9FF"}, {"design", "#A98BFF"}, {"infra", "#91A3AA"},
+	} {
+		label, err := s.CreateLabel(p.ID, l.name, l.color)
+		if err != nil {
+			return err
+		}
+		labels[l.name] = label.ID
+	}
+
+	samples := []struct {
+		title, desc, column string
+		priority            model.Priority
+		estimate            int
+		assignee            string
+		labels              []string
+		subtasks            []string
+		dueDays             int
+		comment             string
+	}{
+		{"Desenhar fluxo de onboarding", "Mapear os primeiros cinco minutos: abrir, entender o board e criar a primeira task.", "Backlog", model.PriorityHigh, 3, "Carla Nunes", []string{"design"}, []string{"Mapear primeira execução", "Desenhar estados vazios"}, 4, "A primeira execução precisa funcionar sem servidor manual."},
+		{"Definir backup do SQLite", "Decidir formato, frequência e retenção para instalações locais.", "Backlog", model.PriorityMedium, 2, "", []string{"infra"}, nil, 0, ""},
+		{"Corrigir hidratação de detalhes", "Garantir que labels e checklist apareçam ao abrir uma task por ID ou referência.", "Todo", model.PriorityUrgent, 1, "Ana Lima", []string{"bug"}, []string{"Reproduzir no smoke test", "Adicionar regressão"}, 1, "Esse bug afeta TUI e MCP."},
+		{"Implementar sincronização via API", "Cliente HTTP consistente, mensagens de erro úteis e refresh previsível.", "Todo", model.PriorityHigh, 5, "Bruno Reis", []string{"feature", "infra"}, []string{"Health check", "Listar board", "Retry visual"}, 2, ""},
+		{"Criar installer one-line", "curl | bash e irm | iex publicados no release com checksum.", "In Progress", model.PriorityHigh, 3, "Bruno Reis", []string{"infra"}, []string{"Linux amd64", "Windows PowerShell"}, 3, "Validar em máquina limpa antes do release."},
+		{"Revisar atalhos de teclado", "Padronizar navegação hjkl, comandos contextuais e ajuda descoberta.", "Review", model.PriorityMedium, 2, "Carla Nunes", []string{"design"}, nil, 0, ""},
+		{"Estruturar schema do SQLite", "Tabelas de projects, tasks, labels, comments, subtasks e activity.", "Done", model.PriorityNone, 3, "Ana Lima", []string{"infra"}, []string{"Schema inicial", "Índices"}, 0, ""},
+	}
+	for _, sample := range samples {
+		t, err := s.CreateTask(p.ID, byName[sample.column], sample.title, sample.desc, sample.priority, sample.estimate)
+		if err != nil {
+			return err
+		}
+		if len(sample.labels) > 0 {
+			ids := make([]string, 0, len(sample.labels))
+			for _, name := range sample.labels {
+				ids = append(ids, labels[name])
+			}
+			if err := s.SetTaskLabels(t.ID, ids); err != nil {
+				return err
+			}
+		}
+		if sample.assignee != "" || sample.dueDays != 0 {
+			u := TaskUpdate{}
+			if sample.assignee != "" {
+				id := members[sample.assignee]
+				u.SetAssignee = true
+				u.AssigneeID = &id
+			}
+			if sample.dueDays != 0 {
+				due := time.Now().UTC().Add(time.Duration(sample.dueDays) * 24 * time.Hour)
+				u.SetDueDate = true
+				u.DueDate = &due
+			}
+			if _, err := s.UpdateTask(t.ID, u); err != nil {
+				return err
+			}
+		}
+		for i, title := range sample.subtasks {
+			sub, err := s.AddSubtask(t.ID, title)
+			if err != nil {
+				return err
+			}
+			if i == 0 && sample.column == "Done" {
+				done := true
+				if _, err := s.UpdateSubtask(sub.ID, nil, &done); err != nil {
+					return err
+				}
+			}
+		}
+		if sample.comment != "" {
+			if _, err := s.AddComment(t.ID, "Ana Lima", sample.comment); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

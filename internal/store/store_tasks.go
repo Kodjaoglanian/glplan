@@ -186,10 +186,11 @@ func (s *Store) GetTask(idOrRef string) (*model.Task, error) {
 	if err != nil {
 		return nil, notFound(err)
 	}
-	if err := s.hydrate([]model.Task{t}); err != nil {
+	tasks := []model.Task{t}
+	if err := s.hydrate(tasks); err != nil {
 		return nil, err
 	}
-	return &t, nil
+	return &tasks[0], nil
 }
 
 // CreateTask adds a task to a board, assigning the next sequential reference.
@@ -198,7 +199,7 @@ func (s *Store) CreateTask(projectID, columnID, title, description string, prior
 	if err != nil {
 		return nil, err
 	}
-	cols, err := s.ListColumns(projectID)
+	cols, err := s.ListColumns(p.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -210,14 +211,14 @@ func (s *Store) CreateTask(projectID, columnID, title, description string, prior
 			}
 		}
 	}
-	valid := false
-	for _, c := range cols {
-		if c.ID == columnID {
-			valid = true
+	var selected *model.Column
+	for i := range cols {
+		if cols[i].ID == columnID {
+			selected = &cols[i]
 			break
 		}
 	}
-	if !valid {
+	if selected == nil {
 		return nil, fmt.Errorf("unknown column %q", columnID)
 	}
 	if priority == "" {
@@ -229,7 +230,7 @@ func (s *Store) CreateTask(projectID, columnID, title, description string, prior
 	}
 	defer tx.Rollback()
 	var n int
-	if err := tx.QueryRow(`UPDATE task_seq SET n=n+1 WHERE project_id=? RETURNING n`, projectID).Scan(&n); err != nil {
+	if err := tx.QueryRow(`UPDATE task_seq SET n=n+1 WHERE project_id=? RETURNING n`, p.ID).Scan(&n); err != nil {
 		return nil, err
 	}
 	var pos float64
@@ -239,11 +240,15 @@ func (s *Store) CreateTask(projectID, columnID, title, description string, prior
 	id := model.NewID("tsk")
 	ref := fmt.Sprintf("%s-%d", p.Key, n)
 	ts := now()
-	if _, err := tx.Exec(`INSERT INTO tasks(id,ref,project_id,column_id,title,description,priority,position,estimate,created_at,updated_at)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?)`, id, ref, projectID, columnID, title, description, priority, pos, estimate, ts, ts); err != nil {
+	var completed any
+	if selected.IsDone {
+		completed = ts
+	}
+	if _, err := tx.Exec(`INSERT INTO tasks(id,ref,project_id,column_id,title,description,priority,position,estimate,created_at,updated_at,completed_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, id, ref, p.ID, columnID, title, description, priority, pos, estimate, ts, ts, completed); err != nil {
 		return nil, err
 	}
-	if err := s.logActivityTx(tx, projectID, &id, "system", "task.created", fmt.Sprintf("%s · %s", ref, title)); err != nil {
+	if err := s.logActivityTx(tx, p.ID, &id, "system", "task.created", fmt.Sprintf("%s · %s", ref, title)); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -300,6 +305,9 @@ func (s *Store) UpdateTask(id string, u TaskUpdate) (*model.Task, error) {
 		if err != nil {
 			return nil, err
 		}
+		if col.ProjectID != current.ProjectID {
+			return nil, fmt.Errorf("column belongs to another project")
+		}
 		sets = append(sets, "column_id=?", "completed_at=?")
 		args = append(args, col.ID, nullTime(dueTimeFor(col.IsDone)))
 		changes = append(changes, "column")
@@ -319,7 +327,8 @@ func (s *Store) UpdateTask(id string, u TaskUpdate) (*model.Task, error) {
 		actor = "system"
 	}
 	if len(changes) > 0 {
-		if err := s.LogActivity(current.ProjectID, &current.ID, actor, "task.updated", strings.Join(changes, ", ")); err != nil {
+		detail := current.Ref + " · " + strings.Join(changes, ", ")
+		if err := s.LogActivity(current.ProjectID, &current.ID, actor, "task.updated", detail); err != nil {
 			return nil, err
 		}
 	}
@@ -400,13 +409,20 @@ func (s *Store) MoveTask(id, columnID, beforeID string, position *float64) (*mod
 	var completed any
 	if col.IsDone {
 		completed = ts
+		if t.ColumnID == columnID && t.CompletedAt != nil {
+			completed = fmtTime(*t.CompletedAt)
+		}
 	}
 	if _, err := s.db.Exec(`UPDATE tasks SET column_id=?,position=?,completed_at=?,updated_at=? WHERE id=?`, columnID, pos, completed, ts, id); err != nil {
 		return nil, err
 	}
-	detail := fmt.Sprintf("%s → %s", t.ColumnID, col.Name)
+	from := t.ColumnID
+	if oldCol, err := s.getColumn(t.ColumnID); err == nil {
+		from = oldCol.Name
+	}
+	detail := fmt.Sprintf("%s · %s → %s", t.Ref, from, col.Name)
 	if t.ColumnID == columnID {
-		detail = "reordered"
+		detail = t.Ref + " · reordered"
 	}
 	if err := s.LogActivity(t.ProjectID, &t.ID, "system", "task.moved", detail); err != nil {
 		return nil, err

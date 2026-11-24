@@ -120,34 +120,34 @@ type Comment struct {
 
 // Activity is an audit entry describing a change.
 type Activity struct {
-	ID        string     `json:"id"`
-	ProjectID string     `json:"project_id"`
-	TaskID    *string    `json:"task_id"`
-	Actor     string     `json:"actor"`
-	Action    string     `json:"action"`
-	Detail    string     `json:"detail"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID        string    `json:"id"`
+	ProjectID string    `json:"project_id"`
+	TaskID    *string   `json:"task_id"`
+	Actor     string    `json:"actor"`
+	Action    string    `json:"action"`
+	Detail    string    `json:"detail"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // Board is a project together with its lanes and summary counters.
 type Board struct {
-	Project  Project            `json:"project"`
-	Columns  []Column           `json:"columns"`
-	Counts   map[string]int     `json:"counts"`
-	Members  []Member           `json:"members"`
-	Labels   []Label            `json:"labels"`
+	Project Project        `json:"project"`
+	Columns []Column       `json:"columns"`
+	Counts  map[string]int `json:"counts"`
+	Members []Member       `json:"members"`
+	Labels  []Label        `json:"labels"`
 }
 
 // TaskFilter narrows task listings.
 type TaskFilter struct {
-	ProjectID  string
-	ColumnID   string
-	AssigneeID string
-	LabelID    string
-	Priority   Priority
-	Search     string
+	ProjectID   string
+	ColumnID    string
+	AssigneeID  string
+	LabelID     string
+	Priority    Priority
+	Search      string
 	IncludeDone bool
-	Limit      int
+	Limit       int
 }
 
 // NewID returns a short, URL-safe random identifier.
