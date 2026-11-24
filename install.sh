@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Glplan installer — one-line install:
-#   curl -fsSL https://raw.githubusercontent.com/Kodjaoglanian/glplan/main/install.sh | bash
+#   curl -fsSL https://github.com/Kodjaoglanian/glplan/raw/refs/heads/main/install.sh | bash
 set -euo pipefail
 
 REPO="Kodjaoglanian/glplan"

@@ -62,12 +62,12 @@ jobs:
             echo
             echo 'Linux / macOS:'
             echo '```bash'
-            echo 'curl -fsSL https://raw.githubusercontent.com/Kodjaoglanian/glplan/main/install.sh | bash'
+            echo 'curl -fsSL https://github.com/Kodjaoglanian/glplan/raw/refs/heads/main/install.sh | bash'
             echo '```'
             echo
             echo 'Windows (PowerShell):'
             echo '```powershell'
-            echo 'irm https://raw.githubusercontent.com/Kodjaoglanian/glplan/main/install.ps1 | iex'
+            echo 'irm https://github.com/Kodjaoglanian/glplan/raw/refs/heads/main/install.ps1 | iex'
             echo '```'
             echo
             echo 'Depois: \`glplan serve\` em um terminal e \`glplan tui\` (ou \`glplan mcp\`) em outro.'

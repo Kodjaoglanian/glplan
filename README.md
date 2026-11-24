@@ -14,13 +14,13 @@ Board kanban **AI-first** no terminal. Um binário Go, API HTTP para equipe, TUI
 **Linux (amd64 / arm64):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kodjaoglanian/glplan/main/install.sh | bash
+curl -fsSL https://github.com/Kodjaoglanian/glplan/raw/refs/heads/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://raw.githubusercontent.com/Kodjaoglanian/glplan/main/install.ps1 | iex
+irm https://github.com/Kodjaoglanian/glplan/raw/refs/heads/main/install.ps1 | iex
 ```
 
 O instalador detecta a arquitetura, baixa o asset da última release, valida o SHA256, instala em `~/.glplan/bin` (Linux) ou `%LOCALAPPDATA%\glplan\bin` (Windows) e configura o PATH.

@@ -1,5 +1,5 @@
 # Glplan installer for Windows — one-line install:
-#   irm https://raw.githubusercontent.com/Kodjaoglanian/glplan/main/install.ps1 | iex
+#   irm https://github.com/Kodjaoglanian/glplan/raw/refs/heads/main/install.ps1 | iex
 param(
     [string]$InstallDir = "$env:LOCALAPPDATA\glplan\bin",
     [string]$ConfigDir  = "$env:USERPROFILE\.glplan"
