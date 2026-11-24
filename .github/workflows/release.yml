@@ -149,15 +149,17 @@ jobs:
           if [ "${{ matrix.archive }}" = "tar.gz" ]; then
             ARCHIVE="${NAME}.tar.gz"
             tar czf "$ARCHIVE" -C dist "$BINARY" README.md LICENSE
-            tar tzf "$ARCHIVE" | grep -qx "$BINARY"
-            tar tzf "$ARCHIVE" | grep -qx 'README.md'
-            tar tzf "$ARCHIVE" | grep -qx 'LICENSE'
+            entries="$(tar tzf "$ARCHIVE")"
+            grep -qx "$BINARY" <<< "$entries"
+            grep -qx 'README.md' <<< "$entries"
+            grep -qx 'LICENSE' <<< "$entries"
           else
             ARCHIVE="${NAME}.zip"
             (cd dist && zip -q "../${ARCHIVE}" "$BINARY" README.md LICENSE)
-            unzip -Z1 "$ARCHIVE" | grep -qx "$BINARY"
-            unzip -Z1 "$ARCHIVE" | grep -qx 'README.md'
-            unzip -Z1 "$ARCHIVE" | grep -qx 'LICENSE'
+            entries="$(unzip -Z1 "$ARCHIVE")"
+            grep -qx "$BINARY" <<< "$entries"
+            grep -qx 'README.md' <<< "$entries"
+            grep -qx 'LICENSE' <<< "$entries"
           fi
           sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256"
           sha256sum -c "${ARCHIVE}.sha256"
@@ -165,7 +167,7 @@ jobs:
           echo "Archive verified: $ARCHIVE"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: glplan-${{ needs.version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
@@ -184,7 +186,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
