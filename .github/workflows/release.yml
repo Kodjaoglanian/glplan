@@ -1,0 +1,169 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: '1.24.x'
+
+jobs:
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          V="${{ github.event.inputs.version }}"
+          if [ -z "$V" ]; then
+            V="${GITHUB_REF#refs/tags/}"
+          fi
+          if [ -z "$V" ]; then
+            echo "::error::version is empty"
+            exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Release version: $V"
+
+      - name: Generate changelog
+        shell: bash
+        run: |
+          PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV" ]; then
+            LOG=$(git log --pretty=format:'- %s (%h)' "${PREV}..HEAD")
+          else
+            LOG=$(git log --pretty=format:'- %s (%h)' -30)
+          fi
+          {
+            echo "## Glplan ${{ steps.version.outputs.version }}"
+            echo
+            echo "### Mudanças"
+            echo
+            echo "$LOG"
+            echo
+            echo "### Instalação"
+            echo
+            echo 'Linux / macOS:'
+            echo '```bash'
+            echo 'curl -fsSL https://raw.githubusercontent.com/Kodjaoglanian/glplan/main/install.sh | bash'
+            echo '```'
+            echo
+            echo 'Windows (PowerShell):'
+            echo '```powershell'
+            echo 'irm https://raw.githubusercontent.com/Kodjaoglanian/glplan/main/install.ps1 | iex'
+            echo '```'
+            echo
+            echo 'Depois: \`glplan serve\` em um terminal e \`glplan tui\` (ou \`glplan mcp\`) em outro.'
+          } > CHANGELOG.md
+          cat CHANGELOG.md
+
+      - name: Create release and publish installers
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Glplan ${{ steps.version.outputs.version }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          files: |
+            install.sh
+            install.ps1
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: release
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            archive: tar.gz
+          - goos: linux
+            goarch: arm64
+            archive: tar.gz
+          - goos: windows
+            goarch: amd64
+            archive: zip
+          - goos: windows
+            goarch: arm64
+            archive: zip
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build binary
+        shell: bash
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
+          mkdir -p dist
+          CGO_ENABLED=0 go build -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o "dist/glplan${EXT}" ./cmd/glplan
+          cp README.md LICENSE dist/
+          echo "Built dist/glplan${EXT}:"
+          ls -lh dist/
+
+      - name: Package
+        id: package
+        shell: bash
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          NAME="glplan-${VERSION}-${GOOS}-${GOARCH}"
+          if [ "${{ matrix.archive }}" = "tar.gz" ]; then
+            ARCHIVE="${NAME}.tar.gz"
+            tar czf "$ARCHIVE" -C dist .
+          else
+            ARCHIVE="${NAME}.zip"
+            (cd dist && zip -q -r "../${ARCHIVE}" .)
+          fi
+          sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256"
+          echo "name=$ARCHIVE" >> "$GITHUB_OUTPUT"
+          echo "Archive: $ARCHIVE"
+          cat "${ARCHIVE}.sha256"
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.release.outputs.version }}
+          files: |
+            ${{ steps.package.outputs.name }}
+            ${{ steps.package.outputs.name }}.sha256
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

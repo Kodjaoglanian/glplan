@@ -1,0 +1,7 @@
+/glplan
+/glplan.exe
+/dist/
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
