@@ -12,6 +12,7 @@ info()    { echo -e "${CYAN}[info]${NC} $*"; }
 ok()      { echo -e "${GREEN}[ok]${NC}   $*"; }
 warn()    { echo -e "${YELLOW}[warn]${NC} $*"; }
 error()   { echo -e "${RED}[error]${NC} $*"; exit 1; }
+tmp=""
 
 detect_target() {
     local os arch
@@ -79,7 +80,7 @@ main() {
     info "Baixando $archive"
 
     tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
+    trap 'rm -rf "${tmp:-}"' EXIT
     fetch "$url" "$tmp/$archive" || error "download falhou: $url"
 
     info "Verificando SHA256"
