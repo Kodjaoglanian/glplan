@@ -114,6 +114,16 @@ CREATE TABLE IF NOT EXISTS activities (
 	created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_activities_project ON activities(project_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS webhooks (
+	id         TEXT PRIMARY KEY,
+	project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+	url        TEXT NOT NULL,
+	secret     TEXT NOT NULL DEFAULT '',
+	events     TEXT NOT NULL DEFAULT '*',
+	active     INTEGER NOT NULL DEFAULT 1,
+	created_at TEXT NOT NULL
+);
 `
 
 // Open creates or opens the database at path and migrates the schema.

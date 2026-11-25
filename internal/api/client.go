@@ -287,3 +287,43 @@ func (c *Client) Search(projectID, query string) ([]model.Task, error) {
 	err := c.do("GET", "/api/search?"+q.Encode(), nil, &out)
 	return out, err
 }
+
+// WebhookInput carries fields to create or update a webhook.
+type WebhookInput struct {
+	ProjectID string `json:"project_id,omitempty"`
+	URL       string `json:"url,omitempty"`
+	Secret    string `json:"secret,omitempty"`
+	Events    string `json:"events,omitempty"`
+	Active    *bool  `json:"active,omitempty"`
+}
+
+// ListWebhooks returns registered webhooks.
+func (c *Client) ListWebhooks() ([]model.Webhook, error) {
+	var out []model.Webhook
+	err := c.do("GET", "/api/webhooks", nil, &out)
+	return out, err
+}
+
+// CreateWebhook registers a webhook endpoint.
+func (c *Client) CreateWebhook(in WebhookInput) (*model.Webhook, error) {
+	var out model.Webhook
+	err := c.do("POST", "/api/webhooks", in, &out)
+	return &out, err
+}
+
+// UpdateWebhook applies partial changes to a webhook.
+func (c *Client) UpdateWebhook(id string, in WebhookInput) (*model.Webhook, error) {
+	var out model.Webhook
+	err := c.do("PATCH", "/api/webhooks/"+url.PathEscape(id), in, &out)
+	return &out, err
+}
+
+// DeleteWebhook removes a webhook.
+func (c *Client) DeleteWebhook(id string) error {
+	return c.do("DELETE", "/api/webhooks/"+url.PathEscape(id), nil, nil)
+}
+
+// TestWebhook fires a test event at the endpoint.
+func (c *Client) TestWebhook(id string) error {
+	return c.do("POST", "/api/webhooks/"+url.PathEscape(id)+"/test", map[string]any{}, nil)
+}

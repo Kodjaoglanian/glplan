@@ -36,6 +36,7 @@ glplan / Glplan [GL]                          ● local  6 abertas  1 urgente  1
 - [Rodando em servidor (time)](#rodando-em-servidor-time)
 - [Conectando clientes](#conectando-clientes)
 - [MCP para agentes de IA](#mcp-para-agentes-de-ia)
+- [Webhooks](#webhooks)
 - [API HTTP](#api-http)
 - [Configuração](#configuração)
 - [Arquitetura](#arquitetura)
@@ -261,6 +262,60 @@ Se preferir explícito (ou em máquina sem `glplan config`):
 
 Na prática: *"cria uma task no glplan pra revisar o deploy de sexta, prioridade alta, responsável Ana"* — e o card aparece no board de todo mundo na hora.
 
+## Webhooks
+
+Webhooks permitem que agentes e automações **reajam** ao board em vez de ficar consultando: quando algo acontece, o glplan faz um HTTP POST assinado para o endpoint registrado. É o mecanismo ideal para "acordar" bots — um agente que dorme esperando trabalho recebe o evento no momento em que a task aparece.
+
+### Registrar
+
+Via API:
+
+```bash
+curl -X POST http://server:9876/api/webhooks \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://meu-bot.exemplo.com/webhook",
+    "secret": "segredo-compartilhado",
+    "events": "task.created,task.moved,comment.added"
+  }'
+```
+
+Ou via MCP pelas tools `create_webhook`, `list_webhooks`, `delete_webhook` e `test_webhook` — o próprio agente pode se registrar.
+
+Campos: `url` (obrigatória), `project_id` (vazio = todos os projetos), `events` (vazio ou `*` = todos; ou lista separada por vírgula), `secret` (para verificar a assinatura).
+
+### Eventos
+
+`task.created`, `task.updated`, `task.moved`, `task.deleted`, `comment.added`, `webhook.test`.
+
+### Payload
+
+```json
+{
+  "id": "evt_...",
+  "type": "task.created",
+  "project_id": "prj_...",
+  "task_id": "tsk_...",
+  "actor": "system",
+  "detail": "GL-12 · Revisar deploy",
+  "created_at": "2026-11-25T18:00:00Z",
+  "task": { "ref": "GL-12", "title": "Revisar deploy", "priority": "high", "...": "..." }
+}
+```
+
+Headers: `X-Glplan-Event` (tipo), `X-Glplan-Delivery` (id único da entrega) e `X-Glplan-Signature` — `sha256=<hmac-sha256 do corpo com o secret>`. Verifique a assinatura antes de confiar no payload.
+
+### Entrega
+
+Assíncrona e não-bloqueante (mutações no board nunca esperam webhook), com timeout de 10s e até 3 tentativas com backoff. Sucesso = resposta 2xx. Se a fila interna encher, eventos são descartados em vez de travar o board — webhooks são notificação, não garantia de entrega.
+
+Teste um endpoint sem precisar criar task de mentira:
+
+```bash
+curl -X POST http://server:9876/api/webhooks/whk_.../test -H "Authorization: Bearer $TOKEN"
+```
+
 ## API HTTP
 
 Base: `/api`. Autenticação bearer opcional (`GLPLAN_TOKEN` no servidor). Rotas de projeto aceitam **ID ou key** (ex.: `GL`).
@@ -278,6 +333,7 @@ Base: `/api`. Autenticação bearer opcional (`GLPLAN_TOKEN` no servidor). Rotas
 | Comentários | `GET/POST /api/tasks/{id}/comments` |
 | Busca | `GET /api/search?q=...` |
 | Atividade | `GET /api/projects/{id}/activity` |
+| Webhooks | `GET/POST /api/webhooks`, `GET/PATCH/DELETE /api/webhooks/{id}`, `POST /api/webhooks/{id}/test` |
 
 Exemplo:
 

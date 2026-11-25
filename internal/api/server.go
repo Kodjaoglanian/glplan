@@ -19,12 +19,17 @@ import (
 
 // Server serves the REST API.
 type Server struct {
-	store *store.Store
-	token string
+	store        *store.Store
+	token        string
+	webhookQueue chan webhookJob
 }
 
 // New creates an API server. token, when set, is required as a bearer token.
-func New(s *store.Store, token string) *Server { return &Server{store: s, token: token} }
+func New(s *store.Store, token string) *Server {
+	srv := &Server{store: s, token: token}
+	srv.startWebhookDispatcher()
+	return srv
+}
 
 // Handler builds the HTTP router.
 func (s *Server) Handler() http.Handler {
@@ -71,6 +76,13 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/projects/{id}/activity", s.listActivity)
 	mux.HandleFunc("GET /api/search", s.search)
+
+	mux.HandleFunc("GET /api/webhooks", s.listWebhooks)
+	mux.HandleFunc("POST /api/webhooks", s.createWebhook)
+	mux.HandleFunc("GET /api/webhooks/{id}", s.getWebhook)
+	mux.HandleFunc("PATCH /api/webhooks/{id}", s.updateWebhook)
+	mux.HandleFunc("DELETE /api/webhooks/{id}", s.deleteWebhook)
+	mux.HandleFunc("POST /api/webhooks/{id}/test", s.testWebhook)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {

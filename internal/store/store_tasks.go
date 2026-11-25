@@ -254,6 +254,7 @@ func (s *Store) CreateTask(projectID, columnID, title, description string, prior
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	s.emit("task.created", p.ID, &id, "system", fmt.Sprintf("%s · %s", ref, title))
 	return s.GetTask(id)
 }
 
@@ -457,7 +458,11 @@ func (s *Store) SetTaskLabels(id string, labelIDs []string) error {
 
 // LogActivity appends an entry to the project's activity feed.
 func (s *Store) LogActivity(projectID string, taskID *string, actor, action, detail string) error {
-	return s.logActivityTx(s.db, projectID, taskID, actor, action, detail)
+	if err := s.logActivityTx(s.db, projectID, taskID, actor, action, detail); err != nil {
+		return err
+	}
+	s.emit(action, projectID, taskID, actor, detail)
+	return nil
 }
 
 type execer interface {

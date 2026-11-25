@@ -169,3 +169,25 @@ func NewID(prefix string) string {
 	}
 	return prefix + "_" + string(id)
 }
+
+// Webhook is a registered HTTP endpoint that receives board events.
+type Webhook struct {
+	ID        string    `json:"id"`
+	ProjectID string    `json:"project_id,omitempty"` // empty means all projects
+	URL       string    `json:"url"`
+	Secret    string    `json:"secret,omitempty"`
+	Events    string    `json:"events"` // comma-separated event types or "*"
+	Active    bool      `json:"active"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Event is a domain occurrence delivered to webhooks.
+type Event struct {
+	ID        string    `json:"id"`
+	Type      string    `json:"type"`
+	ProjectID string    `json:"project_id"`
+	TaskID    string    `json:"task_id,omitempty"`
+	Actor     string    `json:"actor,omitempty"`
+	Detail    string    `json:"detail,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}

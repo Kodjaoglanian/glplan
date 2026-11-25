@@ -471,6 +471,70 @@ func registerTools(s *server.MCPServer, c *api.Client) {
 		}
 		return jsonResult(activity)
 	})
+
+	add(s, mcp.NewTool("list_webhooks",
+		mcp.WithDescription("List registered webhooks that receive board events."),
+	), func(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		webhooks, err := c.ListWebhooks()
+		if err != nil {
+			return fail(err)
+		}
+		return jsonResult(webhooks)
+	})
+
+	add(s, mcp.NewTool("create_webhook",
+		mcp.WithDescription("Register a webhook URL that receives board events (task.created, task.updated, task.moved, task.deleted, comment.added) as signed HTTP POSTs. Use this to wake agents when work appears."),
+		mcp.WithString("url", mcp.Required(), mcp.Description("Endpoint that receives POSTs")),
+		mcp.WithString("project", mcp.Description("Project id or key; empty means all projects")),
+		mcp.WithString("events", mcp.Description("Comma-separated event types, default *")),
+		mcp.WithString("secret", mcp.Description("HMAC secret for X-Glplan-Signature verification")),
+	), func(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		url, err := req.RequireString("url")
+		if err != nil {
+			return fail(err)
+		}
+		in := api.WebhookInput{URL: url, Secret: req.GetString("secret", ""), Events: req.GetString("events", "")}
+		if proj := req.GetString("project", ""); proj != "" {
+			id, err := resolveProject(c, req)
+			if err != nil {
+				return fail(err)
+			}
+			in.ProjectID = id
+		}
+		wh, err := c.CreateWebhook(in)
+		if err != nil {
+			return fail(err)
+		}
+		return jsonResult(wh)
+	})
+
+	add(s, mcp.NewTool("delete_webhook",
+		mcp.WithDescription("Remove a webhook registration."),
+		mcp.WithString("id", mcp.Required(), mcp.Description("Webhook id")),
+	), func(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, err := req.RequireString("id")
+		if err != nil {
+			return fail(err)
+		}
+		if err := c.DeleteWebhook(id); err != nil {
+			return fail(err)
+		}
+		return mcp.NewToolResultText("webhook deleted"), nil
+	})
+
+	add(s, mcp.NewTool("test_webhook",
+		mcp.WithDescription("Send a webhook.test event to a webhook endpoint to verify delivery."),
+		mcp.WithString("id", mcp.Required(), mcp.Description("Webhook id")),
+	), func(req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, err := req.RequireString("id")
+		if err != nil {
+			return fail(err)
+		}
+		if err := c.TestWebhook(id); err != nil {
+			return fail(err)
+		}
+		return mcp.NewToolResultText("test event delivered"), nil
+	})
 }
 
 func registerPrompts(s *server.MCPServer) {
