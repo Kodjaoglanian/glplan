@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -195,5 +196,51 @@ func TestTaskFormTextFieldsAcceptHLAndArrowKeys(t *testing.T) {
 	m = updated.(Model)
 	if got := m.titleIn.Value(); got != "hl" {
 		t.Fatalf("expected l to reach title input, got %q", got)
+	}
+}
+
+var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func stripANSI(s string) string { return ansiPattern.ReplaceAllString(s, "") }
+
+func TestCardUsesReadableMetadataAndWrapsTitle(t *testing.T) {
+	m := renderTestModel()
+	m.width, m.height = 150, 50
+	m.board.Members = append(m.board.Members, model.Member{ID: "mem_carla", Name: "Carla Nunes", Active: true})
+	assignee := "mem_carla"
+	due := time.Now().Add(24 * time.Hour)
+	task := m.tasks[0]
+	task.Title = "Desenhar fluxo de onboarding para a primeira execução"
+	task.AssigneeID = &assignee
+	task.Estimate = 3
+	task.DueDate = &due
+	task.Subtasks = append(task.Subtasks, model.Subtask{ID: "sub_2", Title: "outro"})
+	out := stripANSI(m.card(task, false, 34))
+	for _, want := range []string{"est 3p", "resp Carla", "chk", "prazo"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected card metadata %q, got:\n%s", want, out)
+		}
+	}
+	if strings.Count(out, "\n") < 3 {
+		t.Fatalf("expected multi-line readable card, got:\n%s", out)
+	}
+}
+
+func TestBoardMetricsCapVisibleColumnsAtFour(t *testing.T) {
+	m := renderTestModel()
+	m.width = 190
+	metrics := m.boardMetrics()
+	if metrics.visibleCols != 4 {
+		t.Fatalf("visibleCols=%d, want 4", metrics.visibleCols)
+	}
+	if metrics.colWidth < 40 {
+		t.Fatalf("colWidth=%d, want at least 40", metrics.colWidth)
+	}
+}
+
+func TestPulseMeterExplainsLoad(t *testing.T) {
+	out := stripANSI(pulseMeter(1, 3, 3, 18, true, ""))
+	if !strings.Contains(out, "carga") || !strings.Contains(out, "33%") {
+		t.Fatalf("expected labeled load meter, got %q", out)
 	}
 }

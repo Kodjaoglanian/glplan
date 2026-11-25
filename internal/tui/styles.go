@@ -105,13 +105,13 @@ func priorityStyle(p string) lipgloss.Style {
 func priorityLabel(p string) string {
 	switch p {
 	case "urgent":
-		return "URG"
+		return "URGENTE"
 	case "high":
-		return "HIGH"
+		return "ALTA"
 	case "medium":
-		return "MED"
+		return "MÉDIA"
 	case "low":
-		return "LOW"
+		return "BAIXA"
 	default:
 		return "—"
 	}

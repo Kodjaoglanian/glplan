@@ -15,7 +15,7 @@ func (m Model) detailView() string {
 	}
 	t := *m.detail
 	width := min(76, max(34, m.width-16))
-	prio := priorityStyle(string(t.Priority)).Render(strings.ToUpper(string(t.Priority)))
+	prio := priorityStyle(string(t.Priority)).Render(priorityLabel(string(t.Priority)))
 	column := lipgloss.NewStyle().Foreground(accentC).Render(m.colName(t.ColumnID))
 	primaryMeta := []string{
 		mutedStyle.Render("coluna ") + column,

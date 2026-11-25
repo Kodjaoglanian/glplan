@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"glplan/internal/api"
+	"glplan/internal/model"
 )
 
 func TestIsLocalAPI(t *testing.T) {
@@ -80,5 +81,42 @@ func TestClientWithEmbeddedUsesLocalBackendWhenDefaultAPIUnavailable(t *testing.
 	defer embedded.Close()
 	if err := client.Health(); err != nil {
 		t.Fatalf("embedded client health: %v", err)
+	}
+}
+
+func TestOpenStoreBootstrapsEmptyProjectByDefault(t *testing.T) {
+	s, err := openStore(filepath.Join(t.TempDir(), "clean.db"), false)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+	projects, err := s.ListProjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("expected one bootstrapped project, got %d", len(projects))
+	}
+	tasks, err := s.ListTasks(model.TaskFilter{ProjectID: projects[0].ID, IncludeDone: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("expected no demo tasks by default, got %d", len(tasks))
+	}
+}
+
+func TestOpenStoreWithDemoSeedsSampleTasks(t *testing.T) {
+	s, err := openStore(filepath.Join(t.TempDir(), "demo.db"), true)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+	tasks, err := s.ListTasks(model.TaskFilter{IncludeDone: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) == 0 {
+		t.Fatal("expected demo tasks when --demo is enabled")
 	}
 }

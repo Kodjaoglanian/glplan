@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -35,20 +34,18 @@ func wrap(s string, width int) []string {
 	lines := []string{}
 	cur := ""
 	for _, w := range words {
-		if utf8.RuneCountInString(w) > width {
+		for ansi.StringWidth(w) > width {
 			if cur != "" {
 				lines = append(lines, cur)
 				cur = ""
 			}
-			for len([]rune(w)) > width {
-				r := []rune(w)
-				lines = append(lines, string(r[:width]))
-				w = string(r[width:])
-			}
+			part := ansi.Cut(w, 0, width)
+			lines = append(lines, part)
+			w = ansi.Cut(w, width, ansi.StringWidth(w))
 		}
 		if cur == "" {
 			cur = w
-		} else if utf8.RuneCountInString(cur)+1+utf8.RuneCountInString(w) <= width {
+		} else if ansi.StringWidth(cur)+1+ansi.StringWidth(w) <= width {
 			cur += " " + w
 		} else {
 			lines = append(lines, cur)
@@ -71,6 +68,14 @@ func clipLines(lines []string, limit int) []string {
 	out := append([]string{}, lines[:limit-1]...)
 	out = append(out, faintStyle.Render("…"))
 	return out
+}
+
+func firstName(name string) string {
+	parts := strings.Fields(name)
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[0]
 }
 
 func initials(name string) string {

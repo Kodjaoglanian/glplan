@@ -91,15 +91,37 @@ func (s *Store) ListComments(taskID string) ([]model.Comment, error) {
 	return out, rows.Err()
 }
 
-// Seed creates sample data for first-time use.
-func (s *Store) Seed() error {
+// Bootstrap creates a clean first project without demo tasks.
+func (s *Store) Bootstrap() error {
 	empty, err := s.Empty()
 	if err != nil || !empty {
 		return err
 	}
-	p := &model.Project{Key: "GL", Name: "Glplan", Description: "Board de exemplo — edite à vontade"}
-	if err := s.CreateProject(p); err != nil {
+	p := &model.Project{Key: "GL", Name: "Glplan", Description: "Meu board"}
+	return s.CreateProject(p)
+}
+
+// Seed creates explicit sample data for demos and tests.
+func (s *Store) Seed() error {
+	projects, err := s.ListProjects()
+	if err != nil {
 		return err
+	}
+	var p *model.Project
+	if len(projects) == 0 {
+		p = &model.Project{Key: "GL", Name: "Glplan", Description: "Board de exemplo — edite à vontade"}
+		if err := s.CreateProject(p); err != nil {
+			return err
+		}
+	} else {
+		p = &projects[0]
+		var taskCount int
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE project_id=?`, p.ID).Scan(&taskCount); err != nil {
+			return err
+		}
+		if taskCount > 0 {
+			return nil
+		}
 	}
 	cols, err := s.ListColumns(p.ID)
 	if err != nil {
@@ -114,6 +136,12 @@ func (s *Store) Seed() error {
 	for _, m := range []struct{ name, color string }{
 		{"Ana Lima", "#3BE4D8"}, {"Bruno Reis", "#63A9FF"}, {"Carla Nunes", "#A98BFF"},
 	} {
+		var existingID string
+		err := s.db.QueryRow(`SELECT id FROM members WHERE name=? LIMIT 1`, m.name).Scan(&existingID)
+		if err == nil {
+			members[m.name] = existingID
+			continue
+		}
 		member, err := s.CreateMember(m.name, "", m.color)
 		if err != nil {
 			return err
@@ -122,9 +150,17 @@ func (s *Store) Seed() error {
 	}
 
 	labels := map[string]string{}
+	if existing, err := s.ListLabels(p.ID); err == nil {
+		for _, label := range existing {
+			labels[label.Name] = label.ID
+		}
+	}
 	for _, l := range []struct{ name, color string }{
 		{"bug", "#FF5263"}, {"feature", "#63A9FF"}, {"design", "#A98BFF"}, {"infra", "#91A3AA"},
 	} {
+		if labels[l.name] != "" {
+			continue
+		}
 		label, err := s.CreateLabel(p.ID, l.name, l.color)
 		if err != nil {
 			return err

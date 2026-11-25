@@ -33,7 +33,7 @@ Sobrescreva com `GLPLAN_INSTALL_DIR` / `GLPLAN_VERSION` se precisar.
 glplan
 ```
 
-Esse é o caminho plug-and-play: se nenhuma API local estiver disponível, o próprio processo da TUI sobe um backend embutido, cria `~/.local/share/glplan/glplan.db` e semeia um board de exemplo na primeira execução (`--no-seed` desliga). Não é preciso entender a arquitetura antes de usar.
+Esse é o caminho plug-and-play: se nenhuma API local estiver disponível, o próprio processo da TUI sobe um backend embutido e cria `~/.local/share/glplan/glplan.db` com um projeto limpo na primeira execução. Não é preciso entender a arquitetura antes de usar. Para explorar com dados fictícios, use `glplan --demo` uma vez ou `glplan init --demo`.
 
 Para compartilhar o mesmo board entre pessoas, agentes e várias janelas, rode um servidor explícito:
 
@@ -89,6 +89,14 @@ Prompts: `plan_sprint`, `triage`.
 ## API
 
 `GET /api/health`, `/api/projects`, `/api/projects/{id}/board`, `/api/tasks`, `/api/tasks/{id}`, `/api/search`, `/api/projects/{id}/activity`, além de rotas para colunas, labels, membros, comentários e subtasks. Rotas de projeto aceitam ID ou key (por exemplo `GL`). Autenticação bearer opcional via `GLPLAN_TOKEN`.
+
+## Atualizando
+
+```bash
+glplan update
+```
+
+O comando consulta a última release no GitHub, compara com a versão instalada, baixa o asset correto para a sua plataforma, valida o SHA256 e substitui o binário de forma atômica. Se já estiver na versão mais recente, ele apenas confirma. No Windows, se o executável estiver em uso, reinstale com `install.ps1`.
 
 ## Configuração
 

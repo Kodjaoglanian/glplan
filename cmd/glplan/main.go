@@ -88,7 +88,8 @@ func main() {
 	token := fs.String("token", cfg.Token, "bearer token")
 	data := fs.String("data", cfg.Data, "SQLite database path")
 	addr := fs.String("addr", cfg.Addr, "listen address for serve")
-	noSeed := fs.Bool("no-seed", false, "do not create sample data")
+	demo := fs.Bool("demo", false, "create demo board with sample data")
+	_ = fs.Bool("no-seed", false, "deprecated: demo data is not created by default")
 	showVersion := fs.Bool("version", false, "print version")
 	_ = fs.Parse(args)
 	if *showVersion {
@@ -98,11 +99,11 @@ func main() {
 
 	switch cmd {
 	case "tui", "board", "":
-		runTUI(*server, *token, *data, *noSeed)
+		runTUI(*server, *token, *data, *demo)
 	case "serve", "server":
-		runServe(*data, *addr, *token, *noSeed)
+		runServe(*data, *addr, *token, *demo)
 	case "mcp", "mcp-server":
-		client, embedded, err := clientWithEmbedded(*server, *token, *data, !*noSeed)
+		client, embedded, err := clientWithEmbedded(*server, *token, *data, *demo)
 		if embedded != nil {
 			defer embedded.Close()
 		}
@@ -115,7 +116,9 @@ func main() {
 			os.Exit(1)
 		}
 	case "init":
-		runInit(*data, *noSeed)
+		runInit(*data, *demo)
+	case "update":
+		runUpdate()
 	case "version":
 		fmt.Println(version)
 	case "config":
@@ -139,7 +142,8 @@ Comandos:
   tui      abre a interface terminal (padrão)
   serve    inicia a API HTTP
   mcp      inicia o servidor MCP via stdio
-  init     cria o banco e dados de exemplo
+  init     cria o banco e um projeto limpo
+  update   atualiza o binário para a última release
   config   salva configuração em ~/.config/glplan/config.json
   version  mostra a versão
 
@@ -148,15 +152,19 @@ Flags:
   --token TOK    bearer token (ou GLPLAN_TOKEN)
   --data PATH    arquivo SQLite (ou GLPLAN_DATA)
   --addr ADDR    endereço do servidor, ex: :9876
-  --no-seed      não cria dados de exemplo`)
+  --demo         cria um board de demonstração com dados de exemplo`)
 }
 
-func openStore(path string, seed bool) (*store.Store, error) {
+func openStore(path string, demo bool) (*store.Store, error) {
 	s, err := store.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	if seed {
+	if err := s.Bootstrap(); err != nil {
+		s.Close()
+		return nil, err
+	}
+	if demo {
 		if err := s.Seed(); err != nil {
 			s.Close()
 			return nil, err
@@ -171,8 +179,8 @@ type embeddedAPI struct {
 	store  *store.Store
 }
 
-func startEmbeddedAPI(data, token string, seed bool) (*embeddedAPI, error) {
-	s, err := openStore(data, seed)
+func startEmbeddedAPI(data, token string, demo bool) (*embeddedAPI, error) {
+	s, err := openStore(data, demo)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +226,7 @@ func shouldStartEmbedded(server string, healthErr error) bool {
 	return !errors.As(healthErr, &apiErr)
 }
 
-func clientWithEmbedded(server, token, data string, seed bool) (*api.Client, *embeddedAPI, error) {
+func clientWithEmbedded(server, token, data string, demo bool) (*api.Client, *embeddedAPI, error) {
 	client := api.NewClient(server, token)
 	healthErr := client.Health()
 	if healthErr == nil {
@@ -227,7 +235,7 @@ func clientWithEmbedded(server, token, data string, seed bool) (*api.Client, *em
 	if !shouldStartEmbedded(server, healthErr) {
 		return client, nil, healthErr
 	}
-	embedded, err := startEmbeddedAPI(data, token, seed)
+	embedded, err := startEmbeddedAPI(data, token, demo)
 	if err != nil {
 		return client, nil, err
 	}
@@ -239,8 +247,8 @@ func clientWithEmbedded(server, token, data string, seed bool) (*api.Client, *em
 	return embeddedClient, embedded, nil
 }
 
-func runTUI(server, token, data string, noSeed bool) {
-	client, embedded, err := clientWithEmbedded(server, token, data, !noSeed)
+func runTUI(server, token, data string, demo bool) {
+	client, embedded, err := clientWithEmbedded(server, token, data, demo)
 	if embedded != nil {
 		defer embedded.Close()
 	}
@@ -265,8 +273,8 @@ func runTUI(server, token, data string, noSeed bool) {
 	}
 }
 
-func runServe(path, addr, token string, noSeed bool) {
-	s, err := openStore(path, !noSeed)
+func runServe(path, addr, token string, demo bool) {
+	s, err := openStore(path, demo)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "banco:", err)
 		os.Exit(1)
@@ -283,8 +291,8 @@ func runServe(path, addr, token string, noSeed bool) {
 	}
 }
 
-func runInit(path string, noSeed bool) {
-	s, err := openStore(path, !noSeed)
+func runInit(path string, demo bool) {
+	s, err := openStore(path, demo)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "banco:", err)
 		os.Exit(1)

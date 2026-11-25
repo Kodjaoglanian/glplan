@@ -2,7 +2,7 @@
 
 ## Tese
 
-O glplan é tratado como um **catálogo operacional de trabalho**, não como um Kanban genérico. Cada task é uma entrada numerada, com prioridade legível como uma trilha lateral; cada coluna expõe carga e pressão por meio de contagem, WIP e um medidor de pulso. A interface deve parecer uma ferramenta profissional de operação: densa, precisa, silenciosa e rápida.
+O glplan é tratado como um **catálogo operacional de trabalho**, não como um Kanban genérico. Cada task é uma entrada numerada, com prioridade legível como uma trilha lateral; cada coluna expõe carga e pressão por meio de contagem, WIP e um medidor explicitamente rotulado. A interface deve parecer uma ferramenta profissional de operação: densa, precisa, silenciosa e rápida.
 
 ## Sistema visual
 
@@ -31,7 +31,8 @@ Em poucos segundos, o primeiro viewport deve responder:
 
 - Cabeçalho compacto com produto, projeto, backend, contadores e erro operacional.
 - Tabs claras para `Board`, `List` e `Activity`.
-- Board adaptativo com colunas roláveis/paginadas conforme a largura.
+- Board adaptativo com no máximo quatro colunas visíveis, roláveis/paginadas conforme a largura; legibilidade vence densidade.
+- Cards usam metadados explícitos (`est`, `resp`, `chk`, `prazo`) e títulos com até duas linhas antes de truncar.
 - Cards com referência, prioridade, título, labels, responsável, checklist, estimativa e prazo.
 - Detail e pickers como overlays contidos no viewport.
 - Footer contextual: apenas comandos válidos no modo atual.

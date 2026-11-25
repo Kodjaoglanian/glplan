@@ -23,8 +23,8 @@ func (m Model) boardMetrics() boardMetrics {
 	if width <= 0 {
 		width = 100
 	}
-	visibleCols := max(1, (width-2)/32)
-	colWidth := clamp((width-2)/visibleCols-2, 25, 38)
+	visibleCols := clamp((width-2)/38, 1, 4)
+	colWidth := clamp((width-2)/visibleCols-2, 25, 44)
 	visibleCards := max(1, (m.height-12)/6)
 	if m.height <= 0 {
 		visibleCards = 5
@@ -136,25 +136,21 @@ func pulseMeter(count, limit, maxCount, width int, active bool, laneColor string
 	if width < 8 {
 		width = 8
 	}
+	label := "volume"
+	value := fmt.Sprint(count)
 	ratio := 0.0
 	if limit > 0 {
+		label = "carga"
 		ratio = float64(count) / float64(limit)
+		value = fmt.Sprintf("%d%%", int(math.Round(ratio*100)))
 	} else if maxCount > 0 {
 		ratio = float64(count) / float64(max(6, maxCount))
 	}
-	fill := 0
-	if count > 0 {
-		fill = clamp(int(math.Round(ratio*float64(width))), 2, width)
+	if count == 0 {
+		return faintStyle.Render(label + " " + value)
 	}
-	wave := []rune("▁▂▃▄▅▄▃▂")
-	out := make([]rune, width)
-	for i := range out {
-		if i < fill {
-			out[i] = wave[i%len(wave)]
-		} else {
-			out[i] = '╌'
-		}
-	}
+	barWidth := clamp(width-11, 5, 10)
+	fill := clamp(int(math.Round(ratio*float64(barWidth))), 1, barWidth)
 	color := faint
 	if active {
 		color = accentC
@@ -164,7 +160,8 @@ func pulseMeter(count, limit, maxCount, width int, active bool, laneColor string
 	} else if count > 0 && !active {
 		color = colorValue(laneColor, muted)
 	}
-	return lipgloss.NewStyle().Foreground(color).Render(string(out))
+	bar := strings.Repeat("█", fill) + faintStyle.Render(strings.Repeat("░", barWidth-fill))
+	return faintStyle.Render(label+" ") + lipgloss.NewStyle().Foreground(color).Render(bar) + mutedStyle.Render(" "+value)
 }
 
 func (m Model) card(t model.Task, selected bool, width int) string {
@@ -175,10 +172,17 @@ func (m Model) card(t model.Task, selected bool, width int) string {
 	ref := cardRefStyle.Render(t.Ref)
 	head := ref + "  " + prio
 	if t.Estimate > 0 {
-		head += "  " + cardMetaStyle.Render(fmt.Sprintf("%dp", t.Estimate))
+		head += "  " + cardMetaStyle.Render(fmt.Sprintf("est %dp", t.Estimate))
 	}
 
-	title := cardTitleStyle.Render(truncate(t.Title, width-5))
+	contentWidth := max(12, width-5)
+	titleLines := wrap(t.Title, contentWidth)
+	if len(titleLines) > 2 {
+		titleLines = append([]string{titleLines[0]}, truncate(titleLines[1]+" "+strings.Join(titleLines[2:], " "), contentWidth))
+	}
+	if len(titleLines) == 0 {
+		titleLines = []string{"sem título"}
+	}
 	labels := []string{}
 	for i, l := range t.Labels {
 		if i >= 2 {
@@ -189,9 +193,10 @@ func (m Model) card(t model.Task, selected bool, width int) string {
 	}
 
 	meta := []string{}
+	dueMeta := ""
 	if t.AssigneeID != nil {
 		if name := m.memberName(*t.AssigneeID); name != "" {
-			meta = append(meta, cardMetaStyle.Render(initials(name)))
+			meta = append(meta, cardMetaStyle.Render("resp "+truncate(firstName(name), 8)))
 		}
 	}
 	if len(t.Subtasks) > 0 {
@@ -201,7 +206,7 @@ func (m Model) card(t model.Task, selected bool, width int) string {
 				done++
 			}
 		}
-		meta = append(meta, progressBar(done, len(t.Subtasks), 4)+cardMetaStyle.Render(fmt.Sprintf(" %d/%d", done, len(t.Subtasks))))
+		meta = append(meta, cardMetaStyle.Render(fmt.Sprintf("chk %d/%d", done, len(t.Subtasks))))
 	}
 	if t.DueDate != nil {
 		due := dueLabel(*t.DueDate)
@@ -209,15 +214,21 @@ func (m Model) card(t model.Task, selected bool, width int) string {
 		if time.Now().After(*t.DueDate) && !t.Done() {
 			style = lipgloss.NewStyle().Foreground(redC)
 		}
-		meta = append(meta, style.Render(due))
+		dueMeta = style.Render("prazo " + due)
 	}
 
-	lines := []string{head, title}
+	lines := []string{head}
+	for _, line := range titleLines {
+		lines = append(lines, cardTitleStyle.Render(line))
+	}
 	if len(labels) > 0 {
-		lines = append(lines, strings.Join(labels, " "))
+		lines = append(lines, truncate(strings.Join(labels, " "), contentWidth))
 	}
 	if len(meta) > 0 {
-		lines = append(lines, strings.Join(meta, " "))
+		lines = append(lines, truncate(strings.Join(meta, faintStyle.Render(" · ")), contentWidth))
+	}
+	if dueMeta != "" {
+		lines = append(lines, truncate(dueMeta, contentWidth))
 	}
 	rail := priorityStyle(string(t.Priority)).Render("▌")
 	for i := range lines {
